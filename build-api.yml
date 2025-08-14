@@ -1,0 +1,72 @@
+name: "Build DMS Api"
+
+trigger: none
+
+pool:
+  name: 'xd-agents-dev-windows-west-europe'
+
+parameters:
+  - name: environment
+    type: string
+    default: Dev
+    values:
+      - Dev
+      - Test
+      - Prod
+
+variables:
+  - group: Dms-Kpi-${{ parameters.environment }}
+
+  - name: solution
+    value: '**/*.sln'
+  - name: buildPlatform
+    value: 'Any CPU'
+  - name: buildConfiguration
+    value: 'Release'
+
+steps:
+
+
+# Step 2: Install .NET Core SDK
+- task: UseDotNet@2
+  displayName: 'Install .NET Core SDK'
+  inputs:
+    packageType: 'sdk'
+    version: '8.0.304'  # Ensure this is your desired .NET version
+
+# Step 3: Restore NuGet packages using the dotnet CLI
+- task: DotNetCoreCLI@2
+  displayName: 'Restore NuGet Packages'
+  inputs:
+    command: 'restore'
+    projects: '$(solution)'
+
+# Step 4: Build the solution using the dotnet CLI
+- task: DotNetCoreCLI@2
+  displayName: 'Build Solution'
+  inputs:
+    command: 'build'
+    projects: '$(solution)'
+    arguments: '--configuration $(buildConfiguration)'
+
+# Step 5: Publish the project as a zip for deployment
+- task: DotNetCoreCLI@2
+  displayName: 'Publish Project'
+  inputs:
+    command: 'publish'
+    projects: '$(solution)'
+    arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)'
+
+# Step 6: Publish the artifact (WebApp.zip)
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish Build Artifacts'
+  inputs:
+    pathToPublish: '$(Build.ArtifactStagingDirectory)'
+    artifactName: 'drop'
+    publishLocation: 'Container'
+
+- powershell: |
+    Write-Host "Adding tag to current pipeline run"
+    $cleanTag = "$(buildTag)".Trim('"')  # Removes quotes from the beginning and end of the tag
+    Write-Host "##vso[build.addbuildtag]$cleanTag"
+  displayName: 'Add env Tag to Pipeline'
